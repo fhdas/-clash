@@ -1,36 +1,69 @@
-# This is a basic workflow to help you get started with Actions
+# author: Dead-summer
+# date: 2021/7/9 18:50
+# -*- coding: utf8 -*-
+import requests, os
+import json
+import time
 
-name: CI
+#该版本考虑实际使用均需要通知，因此默认填写相应的参数即通知，若不想通知删除参数即可
+#填写pushplus的token,不开启则不用填（自己更改）
+pushplus_token = 'f3a47c4a2b1a4b5bbefc4dbbaa7a7ac5'
+# 填入glados账号对应cookie
+cookie = '__cfduid=d2c9e84c2c04d18bfcd17e849f3287c031619954670; __guid=264309849.1745393615004122000.1619954671031.2563; _ga=GA1.2.2012305776.1619954673; _gid=GA1.2.133861423.1619954673; koa:sess=eyJ1c2VySWQiOjgxODI5LCJfZXhwaXJlIjoxNjQ1ODc0NzQwMzIyLCJfbWF4QWdlIjoyNTkyMDAwMDAwMH0=; koa:sess.sig=ygMtSb_OnMxqsk_lrjjnI9Bu9ME; monitor_count=7; _gat_gtag_UA_104464600_2=1'
+referer = 'https://glados.rocks/console/checkin'
 
-# Controls when the workflow will run
-on:
-  # Triggers the workflow on push or pull request events but only for the main branch
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+# GLADOS签到
+def start():
+    url = "https://glados.rocks/api/user/checkin"
+    url2 = "https://glados.rocks/api/user/status"
+    origin = "https://glados.rocks"
+    referer = "https://glados.rocks/console/checkin"
+    useragent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.75 Safari/537.36"
+    payload = {
+        'token': 'glados_network'
+    }
+    state_yestaday = requests.get(url2,
+                                  headers={'cookie': cookie, 'referer': referer, 'origin': origin,
+                                           'user-agent': useragent})
+    time.sleep(10)
+    checkin = requests.post(url,
+                            headers={'cookie': cookie, 'referer': referer, 'origin': origin, 'user-agent': useragent,
+                                     'content-type': 'application/json;charset=UTF-8'}, data=json.dumps(payload))
+    state = requests.get(url2,
+                         headers={'cookie': cookie, 'referer': referer, 'origin': origin, 'user-agent': useragent})
+    mess = checkin.json()['message']
+    # print(res)
+    # 得到今天和昨天的所剩天数
+    if 'message' in checkin.text:
+        #print(checkin.text)
+        time_yestaday = state_yestaday.json()['data']['leftDays']
+        time_yestaday = time_yestaday.split('.')[0]
+        # print(time_yestaday)
+        #print(mess)
+        time_day = state.json()['data']['leftDays']
+        time_day = time_day.split('.')[0]
+    # 判断是否加天数
+    day_change = int(time_day) - int(time_yestaday)
+    if day_change > 0:
+        result = f'+{day_change}天，{time_day}天可用。\n'
+    elif day_change == 0:
+        result = f'天数未变，{time_day}天可用。\n'
+    else:
+        result = '未知错误：'
+    content = result + f'签到信息：{mess}'
+    notice(content)
 
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
-jobs:
-  # This workflow contains a single job called "build"
-  build:
-    # The type of runner that the job will run on
-    runs-on: ubuntu-latest
+def notice(content):
+    # pushplus推送
+    if pushplus_token != '':
+        print("Pushplus 推送开始")
+        data = {"token": pushplus_token, "title": "GLaDOS签到通知", "content": content.replace("\n", "<br>"), "template": "json"}
+        requests.post(url=f"http://www.pushplus.plus/send", data=json.dumps(data))
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
-    steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v2
+def main_handler(event, context):
+    return start()
 
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
 
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
-        run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+if __name__ == '__main__':
+    start()
